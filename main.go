@@ -9,12 +9,14 @@ import (
 	"strings"
 )
 
-const (
-	recipeFolderPath = "/mnt/n/recipes/"
-	outFolder        = "./out"
-)
+var recipeFolderPath string
 
 func main() {
+	if len(os.Args) < 2 {
+		exit("Must provide recipe folder as first argument\n")
+	}
+	recipeFolderPath = os.Args[1]
+
 	http.HandleFunc("/", serve)
 	http.ListenAndServe(":8080", nil)
 
