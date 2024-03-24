@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -11,9 +12,17 @@ import (
 	"path"
 	"strings"
 	"unicode"
+
+	_ "embed"
 )
 
-var recipeFolderPath string
+var (
+	recipeFolderPath string
+
+	//go:embed recipe.html.tmpl
+	recipeTmplText string
+	recipeTmpl     *template.Template
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -21,10 +30,16 @@ func main() {
 	}
 	recipeFolderPath = os.Args[1]
 
+	var err error
+	recipeTmpl, err = template.New("recipe").Parse(recipeTmplText)
+	if err != nil {
+		exit("Failed to parse reipce Template: %v\n", err)
+	}
+
 	eprintf("Serving recipes in folder: %v\n", recipeFolderPath)
 	http.HandleFunc("/", serve)
 
-	err := http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 	eprintln(err)
 }
 
@@ -91,9 +106,25 @@ func serveFile(w http.ResponseWriter, r *http.Request, path string) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	fmt.Fprintf(w, "<pre>\n")
-	w.Write(wrapLines(b))
-	fmt.Fprintf(w, "</pre>\n")
+	page := Page{
+		Title: pageTitle(path),
+		Body:  string(wrapLines(b)),
+	}
+
+	if err := recipeTmpl.Execute(w, page); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+type Page struct {
+	Title string
+	Body  string
+}
+
+func pageTitle(p string) string {
+	file := path.Base(p)
+	name, _, _ := strings.Cut(file, ".")
+	return name
 }
 
 const lineLength = 80
