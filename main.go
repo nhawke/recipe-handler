@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"strings"
+	"unicode"
 )
 
 var recipeFolderPath string
@@ -17,9 +21,11 @@ func main() {
 	}
 	recipeFolderPath = os.Args[1]
 
+	eprintf("Serving recipes in folder: %v\n", recipeFolderPath)
 	http.HandleFunc("/", serve)
-	http.ListenAndServe(":8080", nil)
 
+	err := http.ListenAndServe(":8080", nil)
+	eprintln(err)
 }
 
 func serve(w http.ResponseWriter, req *http.Request) {
@@ -30,17 +36,18 @@ func serve(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	eprintln(page)
+	eprintf("Request path: %v\n", page)
 	if lpage := strings.ToLower(page); !(strings.HasSuffix(lpage, "/") || strings.HasSuffix(lpage, ".md")) {
 		page += ".md"
 	}
 
 	fpath := path.Join(recipeFolderPath, page)
-	eprintln(fpath)
-	http.ServeFile(w, req, path.Clean(fpath))
+	eprintf("Serving page: %v\n", fpath)
+	serveFile(w, req, path.Clean(fpath))
 }
 
-// Listing a dir, modified to exclude the .md suffix and hidden files.
+// dirList lists the contents of a directory, excluding the .md
+// suffix and hidden files with a . prefix.
 func dirList(w http.ResponseWriter, r *http.Request) {
 	dir, err := os.ReadDir(recipeFolderPath)
 
@@ -69,7 +76,53 @@ func dirList(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</pre>\n")
 }
 
-// convenience functions
+func serveFile(w http.ResponseWriter, r *http.Request, path string) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			w.WriteHeader(http.StatusNotFound)
+		} else if errors.Is(err, fs.ErrPermission) {
+			w.WriteHeader(http.StatusForbidden)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	fmt.Fprintf(w, "<pre>\n")
+	w.Write(wrapLines(b))
+	fmt.Fprintf(w, "</pre>\n")
+}
+
+const lineLength = 80
+
+func wrapLines(b []byte) []byte {
+	sb := string(b)
+	out := bytes.Buffer{}
+
+	lpos := 0
+	for _, c := range sb {
+		if c == '\n' {
+			lpos = 0
+		} else if lpos >= 80 && unicode.IsSpace(c) {
+			// Wrap line only if at the end of the word.
+			out.WriteRune('\n')
+			lpos = 0
+		}
+
+		if lpos == 0 && c != '\n' && unicode.IsSpace(c) {
+			// Don't start a created line with a space.
+			continue
+		}
+
+		out.WriteRune(c)
+		lpos++
+	}
+
+	return out.Bytes()
+}
 
 func eprintf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format, args...)
