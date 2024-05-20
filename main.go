@@ -11,7 +11,9 @@ import (
 	"os"
 	"path"
 	"strings"
-	"unicode"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 
 	_ "embed"
 )
@@ -22,6 +24,10 @@ var (
 	//go:embed recipe.html.tmpl
 	recipeTmplText string
 	recipeTmpl     *template.Template
+
+	md = goldmark.New(
+		goldmark.WithExtensions(extension.Linkify),
+	)
 )
 
 func main() {
@@ -106,9 +112,14 @@ func serveFile(w http.ResponseWriter, r *http.Request, path string) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
+	var buf bytes.Buffer
+	if err := md.Convert(b, &buf); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
 	page := Page{
 		Title: pageTitle(path),
-		Body:  string(wrapLines(b)),
+		Body:  template.HTML(buf.String()),
 	}
 
 	if err := recipeTmpl.Execute(w, page); err != nil {
@@ -118,41 +129,13 @@ func serveFile(w http.ResponseWriter, r *http.Request, path string) {
 
 type Page struct {
 	Title string
-	Body  string
+	Body  template.HTML
 }
 
 func pageTitle(p string) string {
 	file := path.Base(p)
 	name, _, _ := strings.Cut(file, ".")
 	return name
-}
-
-const lineLength = 80
-
-func wrapLines(b []byte) []byte {
-	sb := string(b)
-	out := bytes.Buffer{}
-
-	lpos := 0
-	for _, c := range sb {
-		if c == '\n' {
-			lpos = 0
-		} else if lpos >= 80 && unicode.IsSpace(c) {
-			// Wrap line only if at the end of the word.
-			out.WriteRune('\n')
-			lpos = 0
-		}
-
-		if lpos == 0 && c != '\n' && unicode.IsSpace(c) {
-			// Don't start a created line with a space.
-			continue
-		}
-
-		out.WriteRune(c)
-		lpos++
-	}
-
-	return out.Bytes()
 }
 
 func eprintf(format string, args ...any) {
