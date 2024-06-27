@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/nhawke/recipe-server"
+	recipes "github.com/nhawke/recipe-handler"
 
 	_ "embed"
 )

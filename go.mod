@@ -1,4 +1,4 @@
-module github.com/nhawke/recipe-server
+module github.com/nhawke/recipe-handler
 
 go 1.22.1
 
