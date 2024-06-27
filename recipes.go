@@ -1,4 +1,4 @@
-package main
+package recipes
 
 import (
 	"bytes"
@@ -19,41 +19,37 @@ import (
 )
 
 var (
-	recipeFolderPath string
-
 	//go:embed recipe.html.tmpl
 	recipeTmplText string
-	recipeTmpl     *template.Template
+	recipeTmpl     = template.Must(template.New("recipe").Parse(recipeTmplText))
 
 	md = goldmark.New(
 		goldmark.WithExtensions(extension.Linkify),
 	)
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		exit("Must provide recipe folder as first argument\n")
-	}
-	recipeFolderPath = os.Args[1]
-
-	var err error
-	recipeTmpl, err = template.New("recipe").Parse(recipeTmplText)
-	if err != nil {
-		exit("Failed to parse reipce Template: %v\n", err)
-	}
-
-	eprintf("Serving recipes in folder: %v\n", recipeFolderPath)
-	http.HandleFunc("/", serve)
-
-	err = http.ListenAndServe(":8080", nil)
-	eprintln(err)
+// Config defines the configuration options for the recipes handler.
+type Config struct {
+	// Path of the recipe directory
+	Path string
 }
 
-func serve(w http.ResponseWriter, req *http.Request) {
+// Handler is a HTTP handler for serving a recipes directory.
+type Handler struct {
+	recipePath string
+}
+
+func NewHandler(cfg Config) *Handler {
+	return &Handler{
+		recipePath: cfg.Path,
+	}
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	page := req.URL.Path
 
 	if page == "/" {
-		dirList(w, req)
+		h.dirList(w, req)
 		return
 	}
 
@@ -62,18 +58,18 @@ func serve(w http.ResponseWriter, req *http.Request) {
 		page += ".md"
 	}
 
-	fpath := path.Join(recipeFolderPath, page)
+	fpath := path.Join(h.recipePath, page)
 	eprintf("Serving page: %v\n", fpath)
 	serveFile(w, req, path.Clean(fpath))
 }
 
 // dirList lists the contents of a directory, excluding the .md
 // suffix and hidden files with a . prefix.
-func dirList(w http.ResponseWriter, r *http.Request) {
-	dir, err := os.ReadDir(recipeFolderPath)
+func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
+	dir, err := os.ReadDir(h.recipePath)
 
 	if err != nil {
-		errString := fmt.Sprintf("Error reading recipe folder %q: %v\n", recipeFolderPath, err)
+		errString := fmt.Sprintf("Error reading recipe folder %q: %v\n", h.recipePath, err)
 		http.Error(w, errString, 500)
 		return
 	}
