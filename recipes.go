@@ -68,6 +68,7 @@ func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		errString := fmt.Sprintf("Error reading recipe folder %q: %v\n", h.Path, err)
+		fmt.Fprint(os.Stderr, errString)
 		http.Error(w, errString, 500)
 		return
 	}
@@ -84,7 +85,13 @@ func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
 		recipes = append(recipes, name)
 	}
 
-	h.RecipeListTemplate.Execute(w, recipes)
+	var buf bytes.Buffer
+	if err := h.RecipeListTemplate.Execute(&buf, recipes); err != nil {
+		fmt.Fprintf(os.Stderr, "Error executing recipe list template: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
+	w.Write(buf.Bytes())
 }
 
 func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path string) {
@@ -104,6 +111,7 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path string)
 
 	var buf bytes.Buffer
 	if err := md.Convert(b, &buf); err != nil {
+		fmt.Fprintf(os.Stderr, "Error rendering HTML from recipe %v: %v\n", path, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
@@ -112,9 +120,13 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path string)
 		Body:  template.HTML(buf.String()),
 	}
 
-	if err := h.RecipePageTemplate.Execute(w, page); err != nil {
+	buf.Reset()
+	if err := h.RecipePageTemplate.Execute(&buf, page); err != nil {
+		fmt.Fprintf(os.Stderr, "Error rendering recipe %v: %v\n", path, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+
+	w.Write(buf.Bytes())
 }
 
 type Page struct {
