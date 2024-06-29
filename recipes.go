@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -22,11 +21,15 @@ var (
 	//go:embed recipe.html.tmpl
 	recipeTmplText string
 
+	//go:embed recipe_list.html.tmpl
+	recipeListTmplText string
+
 	md = goldmark.New(
 		goldmark.WithExtensions(extension.Linkify),
 	)
 
-	DefaultRecipeTemplate = template.Must(template.New("recipe").Parse(recipeTmplText))
+	DefaultRecipeTemplate     = template.Must(template.New("").Parse(recipeTmplText))
+	DefaultRecipeListTemplate = template.Must(template.New("").Parse(recipeListTmplText))
 )
 
 // Handler is a HTTP handler for serving a recipes directory.
@@ -35,7 +38,9 @@ type Handler struct {
 	Path string
 	// Template to be used for rendering a recipe page. Each recipe page uses the
 	// Page struct for its data.
-	RecipeTemplate *template.Template
+	RecipePageTemplate *template.Template
+	// Template to be used for rendering a recipe list page (i.e. a directory).
+	RecipeListTemplate *template.Template
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -67,9 +72,7 @@ func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, "<pre>\n")
-
+	var recipes []string
 	for _, dirE := range dir {
 		name := strings.TrimSuffix(dirE.Name(), ".md")
 
@@ -78,12 +81,10 @@ func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Properly serialize URL
-		url := url.URL{Path: name}
-		fmt.Fprintf(w, "<a href=\"%s\">%s</a>\n", url.String(), name)
+		recipes = append(recipes, name)
 	}
 
-	fmt.Fprintf(w, "</pre>\n")
+	h.RecipeListTemplate.Execute(w, recipes)
 }
 
 func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path string) {
@@ -111,7 +112,7 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path string)
 		Body:  template.HTML(buf.String()),
 	}
 
-	if err := h.RecipeTemplate.Execute(w, page); err != nil {
+	if err := h.RecipePageTemplate.Execute(w, page); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

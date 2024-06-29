@@ -21,6 +21,7 @@ func main() {
 	http.Handle("/", &recipes.Handler{
 		Path:               recipeFolderPath,
 		RecipePageTemplate: recipes.DefaultRecipeTemplate,
+		RecipeListTemplate: recipes.DefaultRecipeListTemplate,
 	})
 
 	err := http.ListenAndServe(":8080", nil)
