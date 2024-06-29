@@ -18,9 +18,10 @@ func main() {
 	recipeFolderPath := os.Args[1]
 
 	fmt.Fprintf(os.Stderr, "Serving recipes in folder: %v\n", recipeFolderPath)
-	http.Handle("/", recipes.NewHandler(recipes.Config{
-		Path: recipeFolderPath,
-	}))
+	http.Handle("/", &recipes.Handler{
+		Path:               recipeFolderPath,
+		RecipePageTemplate: recipes.DefaultRecipeTemplate,
+	})
 
 	err := http.ListenAndServe(":8080", nil)
 	fmt.Fprintln(os.Stderr, err)

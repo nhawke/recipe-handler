@@ -21,28 +21,21 @@ import (
 var (
 	//go:embed recipe.html.tmpl
 	recipeTmplText string
-	recipeTmpl     = template.Must(template.New("recipe").Parse(recipeTmplText))
 
 	md = goldmark.New(
 		goldmark.WithExtensions(extension.Linkify),
 	)
-)
 
-// Config defines the configuration options for the recipes handler.
-type Config struct {
-	// Path of the recipe directory
-	Path string
-}
+	DefaultRecipeTemplate = template.Must(template.New("recipe").Parse(recipeTmplText))
+)
 
 // Handler is a HTTP handler for serving a recipes directory.
 type Handler struct {
-	recipePath string
-}
-
-func NewHandler(cfg Config) *Handler {
-	return &Handler{
-		recipePath: cfg.Path,
-	}
+	// Path of the recipe directory
+	Path string
+	// Template to be used for rendering a recipe page. Each recipe page uses the
+	// Page struct for its data.
+	RecipeTemplate *template.Template
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -58,18 +51,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		page += ".md"
 	}
 
-	fpath := path.Join(h.recipePath, page)
+	fpath := path.Join(h.Path, page)
 	eprintf("Serving page: %v\n", fpath)
-	serveFile(w, req, path.Clean(fpath))
+	h.serveFile(w, req, path.Clean(fpath))
 }
 
 // dirList lists the contents of a directory, excluding the .md
 // suffix and hidden files with a . prefix.
 func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
-	dir, err := os.ReadDir(h.recipePath)
+	dir, err := os.ReadDir(h.Path)
 
 	if err != nil {
-		errString := fmt.Sprintf("Error reading recipe folder %q: %v\n", h.recipePath, err)
+		errString := fmt.Sprintf("Error reading recipe folder %q: %v\n", h.Path, err)
 		http.Error(w, errString, 500)
 		return
 	}
@@ -93,7 +86,7 @@ func (h *Handler) dirList(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "</pre>\n")
 }
 
-func serveFile(w http.ResponseWriter, r *http.Request, path string) {
+func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -118,7 +111,7 @@ func serveFile(w http.ResponseWriter, r *http.Request, path string) {
 		Body:  template.HTML(buf.String()),
 	}
 
-	if err := recipeTmpl.Execute(w, page); err != nil {
+	if err := h.RecipeTemplate.Execute(w, page); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
